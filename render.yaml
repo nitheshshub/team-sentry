@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: fitsense-ai-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm run render-build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SIMULATOR_MODE
+        value: "true"
