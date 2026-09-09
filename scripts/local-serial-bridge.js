@@ -1,16 +1,8 @@
 /**
- * FitSense AI / FlexSense - Local Laptop Serial Bridge Client Script
+ * FitSense AI / FlexSense - Laptop Local Serial Bridge Client Script
  * -------------------------------------------------------------------
- * This script runs locally on your laptop connected to the ESP32 / Arduino via USB Serial.
- * It reads the relative joint angle JSON output from the microcontroller and automatically 
- * forwards/posts the telemetry packets to your Render Cloud Backend or local API server.
- * 
- * Usage:
- *   node scripts/local-serial-bridge.js [COM_PORT] [TARGET_URL]
- * 
- * Example:
- *   node scripts/local-serial-bridge.js COM3 https://fitsense-ai-backend.onrender.com
- *   node scripts/local-serial-bridge.js COM3 http://localhost:5000
+ * Automatically parses raw serial lines from ESP32/Arduino (JSON or plain numbers),
+ * and forwards joint angle payloads to the Render Cloud Backend API.
  */
 
 import { SerialPort } from 'serialport';
@@ -19,9 +11,8 @@ import http from 'http';
 import https from 'https';
 import { URL } from 'url';
 
-// CLI Arguments or Environment Defaults
 const DEFAULT_PORT = process.env.SERIAL_PORT || 'COM3';
-const TARGET_URL = process.argv[3] || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000';
+const TARGET_URL = process.argv[3] || process.env.RENDER_EXTERNAL_URL || 'https://fitsense-ai-backend-vpak.onrender.com';
 const BAUD_RATE = parseInt(process.env.BAUD_RATE || '115200');
 
 const portPath = process.argv[2] || DEFAULT_PORT;
@@ -53,7 +44,7 @@ async function startBridge() {
     serialPort.open((err) => {
       if (err) {
         console.error(`\n❌ Error opening serial port '${portPath}':`, err.message);
-        console.log('💡 Tip: Make sure your ESP32 is plugged in via USB and check device manager for the correct COM port.\n');
+        console.log('💡 Tip: Make sure Arduino Serial Monitor is closed and check Device Manager for the COM port.\n');
         process.exit(1);
       }
 
@@ -64,18 +55,43 @@ async function startBridge() {
 
     parser.on('data', (line) => {
       const trimmed = line.trim();
-      if (!trimmed.startsWith('{')) return;
+      if (!trimmed) return;
 
-      try {
-        const payload = JSON.parse(trimmed);
+      let payload = null;
+
+      // 1. Try parsing JSON format
+      if (trimmed.startsWith('{')) {
+        try {
+          payload = JSON.parse(trimmed);
+        } catch (e) {}
+      }
+
+      // 2. Fallback: Parse plain text angle format (e.g., "Joint Angle: 45.2 degrees" or "45.2")
+      if (!payload) {
+        const numberMatch = trimmed.match(/[-+]?\d*\.?\d+/);
+        if (numberMatch) {
+          const parsedAngle = parseFloat(numberMatch[0]);
+          if (!isNaN(parsedAngle) && parsedAngle >= 0 && parsedAngle <= 180) {
+            payload = {
+              deviceId: 'ESP32-HARDWARE-AUTOPARSED',
+              flexion: parsedAngle,
+              sensor1: { roll: 0, pitch: Math.round(parsedAngle * 0.6), yaw: 0 },
+              sensor2: { roll: 0, pitch: Math.round(-parsedAngle * 0.4), yaw: 0 },
+              battery: 95
+            };
+          }
+        }
+      }
+
+      if (payload) {
         packetCount++;
+        const angleVal = payload.flexion || payload.flexionAngle || 0;
+        console.log(`[Packet #${packetCount}] Flexion Angle: ${angleVal}° | Payload: ${JSON.stringify(payload)}`);
 
-        console.log(`[Packet #${packetCount}] Flexion Angle: ${payload.flexion || payload.flexionAngle || 'N/A'}° | Pitch1: ${payload.sensor1?.pitch || 'N/A'}° | Pitch2: ${payload.sensor2?.pitch || 'N/A'}°`);
-
-        // Forward telemetry packet to Render Cloud API Endpoint
+        // Push telemetry packet to Render Cloud Backend API
         postTelemetryToBackend(ingestEndpoint, payload);
-      } catch (e) {
-        console.warn('[Bridge] Ignored non-JSON serial line:', trimmed);
+      } else {
+        console.log(`[Raw Serial Line]: ${trimmed}`);
       }
     });
 
@@ -107,12 +123,11 @@ function postTelemetryToBackend(endpointUrl, data) {
     const client = parsedUrl.protocol === 'https:' ? https : http;
 
     const req = client.request(options, (res) => {
-      // Drain response
       res.on('data', () => {});
     });
 
     req.on('error', (err) => {
-      console.warn(`[Bridge HTTP Warning] Failed to reach backend at ${endpointUrl}:`, err.message);
+      console.warn(`[Bridge HTTP Warning] Backend unreachable at ${endpointUrl}:`, err.message);
     });
 
     req.write(postData);
