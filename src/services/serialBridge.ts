@@ -15,7 +15,7 @@ try {
 export class SerialBridgeService {
   private port: any = null;
   private parser: any = null;
-  private isSimulating: boolean = true;
+  private isSimulating: boolean = false; // Default to FALSE so no fake angles run unless explicitly enabled
   private connectedPortName: string | null = null;
   private baudRate: number = 115200;
   private packetsIngested: number = 0;
@@ -27,10 +27,10 @@ export class SerialBridgeService {
 
   constructor() {
     const envSim = process.env.SIMULATOR_MODE;
-    if (envSim === 'false') {
-      this.isSimulating = false;
-    } else {
+    if (envSim === 'true') {
       this.isSimulating = true;
+    } else {
+      this.isSimulating = false;
     }
   }
 
@@ -65,7 +65,6 @@ export class SerialBridgeService {
   public async connectToPort(portPath: string, baudRate: number = 115200): Promise<boolean> {
     if (!SerialPortClass) {
       console.warn('[SerialBridge] Physical SerialPort not supported in this cloud environment.');
-      this.startSimulator();
       return false;
     }
 
@@ -84,7 +83,6 @@ export class SerialBridgeService {
       this.port.open((err: any) => {
         if (err) {
           console.error(`[SerialBridge] Failed to open port ${portPath}:`, err.message);
-          this.startSimulator();
           return;
         }
 
@@ -100,13 +98,11 @@ export class SerialBridgeService {
 
       this.port.on('error', (err: any) => {
         console.error('[SerialBridge] SerialPort error:', err.message);
-        this.startSimulator();
       });
 
       return true;
     } catch (err) {
       console.error('[SerialBridge] Error initializing SerialPort:', err);
-      this.startSimulator();
       return false;
     }
   }
@@ -122,17 +118,15 @@ export class SerialBridgeService {
   }
 
   public handleExternalPacket(packet: TelemetryPacket): void {
-    // CRITICAL FIX: The instant a real physical hardware packet arrives, IMMEDIATELY SHUT OFF the simulator!
+    // Shutdown simulator immediately when real physical packet arrives
     if (this.isSimulating) {
       this.stopSimulator();
       this.isSimulating = false;
-      console.log('⚡ [SerialBridge] Physical ESP32 Hardware Packet Received! Disabling Simulator Mode and locking onto REAL Hardware telemetry.');
     }
 
     this.packetsIngested++;
     this.lastPacketReceivedTime = new Date().toISOString();
     
-    // Ensure packet is marked as real physical hardware
     const realPacket: TelemetryPacket = {
       ...packet,
       isSimulated: false
@@ -170,7 +164,6 @@ export class SerialBridgeService {
   public startSimulator(): void {
     if (this.simulatorInterval) return;
     this.isSimulating = true;
-    console.log('[SerialBridge] Hardware simulator active (Generating synthetic Dual MPU6050 joint telemetry)');
 
     this.simulatorInterval = setInterval(() => {
       this.simTime += 0.1;

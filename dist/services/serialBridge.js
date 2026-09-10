@@ -15,7 +15,7 @@ catch (e) {
 class SerialBridgeService {
     port = null;
     parser = null;
-    isSimulating = true;
+    isSimulating = false; // Default to FALSE so no fake angles run unless explicitly enabled
     connectedPortName = null;
     baudRate = 115200;
     packetsIngested = 0;
@@ -25,11 +25,11 @@ class SerialBridgeService {
     simTime = 0;
     constructor() {
         const envSim = process.env.SIMULATOR_MODE;
-        if (envSim === 'false') {
-            this.isSimulating = false;
+        if (envSim === 'true') {
+            this.isSimulating = true;
         }
         else {
-            this.isSimulating = true;
+            this.isSimulating = false;
         }
     }
     onTelemetry(callback) {
@@ -61,7 +61,6 @@ class SerialBridgeService {
     async connectToPort(portPath, baudRate = 115200) {
         if (!SerialPortClass) {
             console.warn('[SerialBridge] Physical SerialPort not supported in this cloud environment.');
-            this.startSimulator();
             return false;
         }
         this.stopSimulator();
@@ -76,7 +75,6 @@ class SerialBridgeService {
             this.port.open((err) => {
                 if (err) {
                     console.error(`[SerialBridge] Failed to open port ${portPath}:`, err.message);
-                    this.startSimulator();
                     return;
                 }
                 console.log(`[SerialBridge] Successfully connected to serial port: ${portPath} @ ${baudRate} baud`);
@@ -89,13 +87,11 @@ class SerialBridgeService {
             });
             this.port.on('error', (err) => {
                 console.error('[SerialBridge] SerialPort error:', err.message);
-                this.startSimulator();
             });
             return true;
         }
         catch (err) {
             console.error('[SerialBridge] Error initializing SerialPort:', err);
-            this.startSimulator();
             return false;
         }
     }
@@ -110,15 +106,13 @@ class SerialBridgeService {
         }
     }
     handleExternalPacket(packet) {
-        // CRITICAL FIX: The instant a real physical hardware packet arrives, IMMEDIATELY SHUT OFF the simulator!
+        // Shutdown simulator immediately when real physical packet arrives
         if (this.isSimulating) {
             this.stopSimulator();
             this.isSimulating = false;
-            console.log('⚡ [SerialBridge] Physical ESP32 Hardware Packet Received! Disabling Simulator Mode and locking onto REAL Hardware telemetry.');
         }
         this.packetsIngested++;
         this.lastPacketReceivedTime = new Date().toISOString();
-        // Ensure packet is marked as real physical hardware
         const realPacket = {
             ...packet,
             isSimulated: false
@@ -154,7 +148,6 @@ class SerialBridgeService {
         if (this.simulatorInterval)
             return;
         this.isSimulating = true;
-        console.log('[SerialBridge] Hardware simulator active (Generating synthetic Dual MPU6050 joint telemetry)');
         this.simulatorInterval = setInterval(() => {
             this.simTime += 0.1;
             const baseFlexion = Math.max(0, 52.5 * (1 + Math.sin(this.simTime * 0.8)) - 5);
