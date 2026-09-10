@@ -1,8 +1,12 @@
 /**
- * FitSense AI / FlexSense - Laptop Local Serial Bridge Client Script
+ * FitSense AI / FlexSense - Smart Universal Serial Bridge Client Script
  * -------------------------------------------------------------------
- * Automatically parses raw serial lines from ESP32/Arduino (JSON or plain numbers),
- * and forwards joint angle payloads to the Render Cloud Backend API.
+ * Universal parser for physical ESP32 / Arduino serial outputs.
+ * Parses JSON payloads OR plain text lines like:
+ *   - "Joint Angle: 45.2 degrees"
+ *   - "Angle: 75.4"
+ *   - "flexion: 85.0"
+ *   - "45.2"
  */
 
 import { SerialPort } from 'serialport';
@@ -20,7 +24,7 @@ const ingestEndpoint = `${TARGET_URL.replace(/\/$/, '')}/api/telemetry/ingest`;
 
 console.log(`
 ===================================================================
- 🔌 FitSense AI - Laptop Local Serial Bridge Starting...
+ 🔌 FitSense AI - Universal Serial Bridge Active
  ===================================================================
   • Hardware Port: ${portPath} @ ${BAUD_RATE} baud
   • Cloud API Target: ${ingestEndpoint}
@@ -48,7 +52,7 @@ async function startBridge() {
         process.exit(1);
       }
 
-      console.log(`\n✅ Connected to ESP32 on ${portPath}! Listening for sensor packets...\n`);
+      console.log(`\n✅ Connected to ESP32 on ${portPath}! Streaming sensor packets to dashboard...\n`);
     });
 
     let packetCount = 0;
@@ -66,15 +70,17 @@ async function startBridge() {
         } catch (e) {}
       }
 
-      // 2. Fallback: Parse plain text angle format (e.g., "Joint Angle: 45.2 degrees" or "45.2")
+      // 2. Extract numeric angle from string format (e.g., "Joint Angle: 45.2 degrees")
       if (!payload) {
-        const numberMatch = trimmed.match(/[-+]?\d*\.?\d+/);
-        if (numberMatch) {
-          const parsedAngle = parseFloat(numberMatch[0]);
+        const numberMatches = trimmed.match(/[-+]?\d*\.?\d+/g);
+        if (numberMatches && numberMatches.length > 0) {
+          const parsedAngle = parseFloat(numberMatches[0]);
           if (!isNaN(parsedAngle) && parsedAngle >= 0 && parsedAngle <= 180) {
             payload = {
-              deviceId: 'ESP32-HARDWARE-AUTOPARSED',
+              deviceId: 'ESP32-HARDWARE-ARDUINO',
               flexion: parsedAngle,
+              angle: parsedAngle,
+              jointAngle: parsedAngle,
               sensor1: { roll: 0, pitch: Math.round(parsedAngle * 0.6), yaw: 0 },
               sensor2: { roll: 0, pitch: Math.round(-parsedAngle * 0.4), yaw: 0 },
               battery: 95
@@ -85,13 +91,18 @@ async function startBridge() {
 
       if (payload) {
         packetCount++;
-        const angleVal = payload.flexion || payload.flexionAngle || 0;
-        console.log(`[Packet #${packetCount}] Flexion Angle: ${angleVal}° | Payload: ${JSON.stringify(payload)}`);
+        const angleVal = payload.flexion || payload.flexionAngle || payload.angle || payload.jointAngle || 0;
+        console.log(`[Packet #${packetCount}] Arduino Joint Angle: ${angleVal}° | Raw Serial: "${trimmed}"`);
 
-        // Push telemetry packet to Render Cloud Backend API
+        // Post to backend API
         postTelemetryToBackend(ingestEndpoint, payload);
+
+        // Also post to local backend if target is cloud (dual sync)
+        if (TARGET_URL.includes('onrender.com')) {
+          postTelemetryToBackend('http://localhost:5000/api/telemetry/ingest', payload);
+        }
       } else {
-        console.log(`[Raw Serial Line]: ${trimmed}`);
+        console.log(`[Raw Serial]: ${trimmed}`);
       }
     });
 
@@ -126,15 +137,11 @@ function postTelemetryToBackend(endpointUrl, data) {
       res.on('data', () => {});
     });
 
-    req.on('error', (err) => {
-      console.warn(`[Bridge HTTP Warning] Backend unreachable at ${endpointUrl}:`, err.message);
-    });
+    req.on('error', () => {});
 
     req.write(postData);
     req.end();
-  } catch (err) {
-    console.error('[Bridge HTTP Error]:', err.message);
-  }
+  } catch (err) {}
 }
 
 startBridge();
