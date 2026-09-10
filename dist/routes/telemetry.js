@@ -50,12 +50,33 @@ function createTelemetryRouter(serialBridge, evaluationEngine, recentPacketsLog)
         });
     });
     router.get('/latest', (_req, res) => {
-        const latestPacket = recentPacketsLog.length > 0
+        const status = serialBridge.getStatus();
+        let latestPacket = recentPacketsLog.length > 0
             ? recentPacketsLog[recentPacketsLog.length - 1]
             : null;
-        const currentEval = latestPacket
-            ? evaluationEngine.evaluatePacket(latestPacket)
-            : null;
+        // If simulator is disabled, ignore any old leftover simulated packets
+        if (!status.isSimulating && latestPacket && latestPacket.isSimulated) {
+            latestPacket = null;
+        }
+        // If no packet or last hardware packet is older than 3.5 seconds, return clean 0.0 DEG resting baseline
+        const now = Date.now();
+        if (!latestPacket || (now - latestPacket.timestamp > 3500 && !status.isSimulating)) {
+            const standbyPacket = {
+                timestamp: now,
+                deviceId: 'STANDBY',
+                sensor1: { roll: 0, pitch: 0, yaw: 0 },
+                sensor2: { roll: 0, pitch: 0, yaw: 0 },
+                flexionAngle: 0.0,
+                batteryLevel: 100,
+                isSimulated: false
+            };
+            return res.json({
+                success: true,
+                latestPacket: standbyPacket,
+                evaluation: evaluationEngine.evaluatePacket(standbyPacket)
+            });
+        }
+        const currentEval = evaluationEngine.evaluatePacket(latestPacket);
         res.json({
             success: true,
             latestPacket,

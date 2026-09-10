@@ -30,6 +30,7 @@ const MAX_LOG_SIZE = 200;
 // Initialize Core Services
 const serialBridge = new SerialBridgeService();
 const evaluationEngine = new EvaluationEngine(90, 120);
+evaluationEngine.reset();
 
 // WebSocket Server initialization (/ws/telemetry)
 const wss = new WebSocketServer({ server, path: '/ws/telemetry' });

@@ -104,5 +104,25 @@ function createSessionsRouter(evaluationEngine, recentPacketsLog) {
             history: sessionHistory
         });
     });
+    router.post('/reset', (_req, res) => {
+        evaluationEngine.reset();
+        recentPacketsLog.length = 0;
+        const zeroPacket = {
+            timestamp: Date.now(),
+            deviceId: 'STANDBY',
+            sensor1: { roll: 0, pitch: 0, yaw: 0 },
+            sensor2: { roll: 0, pitch: 0, yaw: 0 },
+            flexionAngle: 0.0,
+            batteryLevel: 100,
+            isSimulated: false
+        };
+        const freshEval = evaluationEngine.evaluatePacket(zeroPacket);
+        res.json({
+            success: true,
+            message: 'Session repetition state machine and scores reset to ZERO.',
+            evaluation: freshEval,
+            latestPacket: zeroPacket
+        });
+    });
     return router;
 }
