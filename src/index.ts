@@ -118,8 +118,12 @@ server.listen(PORT, () => {
 ===================================================================
   `);
 
-  // Start hardware simulator by default if SIMULATOR_MODE is set or default
-  if (process.env.SIMULATOR_MODE !== 'false') {
+  // ONLY start hardware simulator if SIMULATOR_MODE environment variable is explicitly set to 'true'
+  if (process.env.SIMULATOR_MODE === 'true') {
+    console.log('[Simulator] SIMULATOR_MODE=true set in environment. Launching mock telemetry generator.');
     serialBridge.startSimulator();
+  } else {
+    console.log('[Simulator] Hardware simulator OFF by default. Awaiting real ESP32 serial bridge telemetry at /api/telemetry/ingest.');
   }
 });
+
