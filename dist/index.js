@@ -87,7 +87,7 @@ app.get('/api/health', (_req, res) => {
 // Attach REST API Routers
 app.use('/api/telemetry', (0, telemetry_1.createTelemetryRouter)(serialBridge, evaluationEngine, recentPacketsLog));
 app.use('/api/patients', (0, patients_1.createPatientsRouter)());
-app.use('/api/sessions', (0, sessions_1.createSessionsRouter)(evaluationEngine, recentPacketsLog));
+app.use('/api/sessions', (0, sessions_1.createSessionsRouter)(evaluationEngine, recentPacketsLog, serialBridge));
 app.use('/api/bridge', (0, bridge_1.createBridgeRouter)(serialBridge));
 // Start server
 server.listen(PORT, () => {

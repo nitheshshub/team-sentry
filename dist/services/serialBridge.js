@@ -178,6 +178,7 @@ class SerialBridgeService {
             clearInterval(this.simulatorInterval);
             this.simulatorInterval = null;
         }
+        this.isSimulating = false;
     }
     closeCurrentPort() {
         if (this.port && this.port.isOpen) {

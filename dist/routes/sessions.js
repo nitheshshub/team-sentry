@@ -6,7 +6,7 @@ const recoveryScore_1 = require("../services/recoveryScore");
 const mockPatients_1 = require("../data/mockPatients");
 let activeSession = null;
 const sessionHistory = [];
-function createSessionsRouter(evaluationEngine, recentPacketsLog) {
+function createSessionsRouter(evaluationEngine, recentPacketsLog, serialBridge) {
     const router = (0, express_1.Router)();
     router.post('/start', (req, res) => {
         const { patientId, targetRomMin, targetRomMax } = req.body;
@@ -105,6 +105,10 @@ function createSessionsRouter(evaluationEngine, recentPacketsLog) {
         });
     });
     router.post('/reset', (_req, res) => {
+        if (serialBridge) {
+            serialBridge.setSimulationMode(false);
+            serialBridge.stopSimulator();
+        }
         evaluationEngine.reset();
         recentPacketsLog.length = 0;
         const zeroPacket = {
@@ -116,10 +120,13 @@ function createSessionsRouter(evaluationEngine, recentPacketsLog) {
             batteryLevel: 100,
             isSimulated: false
         };
+        if (serialBridge) {
+            serialBridge.handleExternalPacket(zeroPacket);
+        }
         const freshEval = evaluationEngine.evaluatePacket(zeroPacket);
         res.json({
             success: true,
-            message: 'Session repetition state machine and scores reset to ZERO.',
+            message: 'Relative joint flexion angle and rep state machine reset to 0.0 DEG°.',
             evaluation: freshEval,
             latestPacket: zeroPacket
         });

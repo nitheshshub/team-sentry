@@ -200,6 +200,7 @@ export class SerialBridgeService {
       clearInterval(this.simulatorInterval);
       this.simulatorInterval = null;
     }
+    this.isSimulating = false;
   }
 
   private closeCurrentPort(): void {

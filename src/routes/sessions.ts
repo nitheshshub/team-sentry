@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { EvaluationEngine } from '../services/evaluationEngine';
+import { SerialBridgeService } from '../services/serialBridge';
 import { calculateRecoveryScore } from '../services/recoveryScore';
 import { ExerciseSession, TelemetryPacket } from '../types';
 import { mockPatients } from '../data/mockPatients';
@@ -15,7 +16,8 @@ const sessionHistory: ExerciseSession[] = [];
 
 export function createSessionsRouter(
   evaluationEngine: EvaluationEngine,
-  recentPacketsLog: TelemetryPacket[]
+  recentPacketsLog: TelemetryPacket[],
+  serialBridge?: SerialBridgeService
 ): Router {
   const router = Router();
 
@@ -138,6 +140,10 @@ export function createSessionsRouter(
   });
 
   router.post('/reset', (_req: Request, res: Response) => {
+    if (serialBridge) {
+      serialBridge.setSimulationMode(false);
+      serialBridge.stopSimulator();
+    }
     evaluationEngine.reset();
     recentPacketsLog.length = 0;
 
@@ -151,11 +157,14 @@ export function createSessionsRouter(
       isSimulated: false
     };
 
+    if (serialBridge) {
+      serialBridge.handleExternalPacket(zeroPacket);
+    }
     const freshEval = evaluationEngine.evaluatePacket(zeroPacket);
 
     res.json({
       success: true,
-      message: 'Session repetition state machine and scores reset to ZERO.',
+      message: 'Relative joint flexion angle and rep state machine reset to 0.0 DEG°.',
       evaluation: freshEval,
       latestPacket: zeroPacket
     });

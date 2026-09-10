@@ -102,7 +102,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 // Attach REST API Routers
 app.use('/api/telemetry', createTelemetryRouter(serialBridge, evaluationEngine, recentPacketsLog));
 app.use('/api/patients', createPatientsRouter());
-app.use('/api/sessions', createSessionsRouter(evaluationEngine, recentPacketsLog));
+app.use('/api/sessions', createSessionsRouter(evaluationEngine, recentPacketsLog, serialBridge));
 app.use('/api/bridge', createBridgeRouter(serialBridge));
 
 // Start server
