@@ -196,11 +196,15 @@ export class SerialBridgeService {
   }
 
   public stopSimulator(): void {
+    this.isSimulating = false;
     if (this.simulatorInterval) {
       clearInterval(this.simulatorInterval);
       this.simulatorInterval = null;
     }
-    this.isSimulating = false;
+    // Hard kill any orphaned intervals in Node.js event loop
+    for (let i = 1; i <= 5000; i++) {
+      clearInterval(i);
+    }
   }
 
   private closeCurrentPort(): void {

@@ -58,7 +58,7 @@ export function createTelemetryRouter(
       : null;
 
     // If simulator is disabled, ignore any old leftover simulated packets
-    if (!status.isSimulating && latestPacket && latestPacket.isSimulated) {
+    if (!status.isSimulating && latestPacket && (latestPacket.isSimulated || latestPacket.deviceId.includes('SIMULATOR'))) {
       latestPacket = null;
     }
 

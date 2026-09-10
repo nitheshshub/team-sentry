@@ -55,7 +55,7 @@ function createTelemetryRouter(serialBridge, evaluationEngine, recentPacketsLog)
             ? recentPacketsLog[recentPacketsLog.length - 1]
             : null;
         // If simulator is disabled, ignore any old leftover simulated packets
-        if (!status.isSimulating && latestPacket && latestPacket.isSimulated) {
+        if (!status.isSimulating && latestPacket && (latestPacket.isSimulated || latestPacket.deviceId.includes('SIMULATOR'))) {
             latestPacket = null;
         }
         // If no packet or last hardware packet is older than 3.5 seconds, return clean 0.0 DEG resting baseline
