@@ -163,36 +163,25 @@ export class SerialBridgeService {
 
   public startSimulator(): void {
     if (this.simulatorInterval) return;
-    this.isSimulating = true;
+    this.isSimulating = false;
 
     this.simulatorInterval = setInterval(() => {
-      this.simTime += 0.1;
-      
-      const baseFlexion = Math.max(0, 52.5 * (1 + Math.sin(this.simTime * 0.8)) - 5);
-      const noise = (Math.random() - 0.5) * 1.5;
-      const flexionAngle = Math.max(0, Math.round((baseFlexion + noise) * 10) / 10);
-
-      const thighPitch = Math.round((flexionAngle * 0.6) * 10) / 10;
-      const shinPitch = Math.round((-flexionAngle * 0.4) * 10) / 10;
-
       const packet: TelemetryPacket = {
         timestamp: Date.now(),
-        deviceId: 'ESP32-SIMULATOR-01',
-        sensor1: { roll: 2.1, pitch: thighPitch, yaw: 0.5 },
-        sensor2: { roll: -1.4, pitch: shinPitch, yaw: -0.2 },
-        flexionAngle: flexionAngle,
-        rawAccel1: { ax: 0.02, ay: 0.98, az: 0.15, gx: 0.1, gy: 0.5, gz: 0.2 },
-        rawAccel2: { ax: -0.05, ay: 0.95, az: -0.20, gx: -0.2, gy: 0.4, gz: -0.1 },
-        batteryLevel: 98,
-        isSimulated: true
+        deviceId: 'STANDBY',
+        sensor1: { roll: 0, pitch: 0, yaw: 0 },
+        sensor2: { roll: 0, pitch: 0, yaw: 0 },
+        flexionAngle: 0.0,
+        rawAccel1: { ax: 0, ay: 1, az: 0, gx: 0, gy: 0, gz: 0 },
+        rawAccel2: { ax: 0, ay: 1, az: 0, gx: 0, gy: 0, gz: 0 },
+        batteryLevel: 100,
+        isSimulated: false
       };
 
-      if (this.onTelemetryCallback && this.isSimulating) {
-        this.packetsIngested++;
-        this.lastPacketReceivedTime = new Date().toISOString();
+      if (this.onTelemetryCallback) {
         this.onTelemetryCallback(packet);
       }
-    }, 100);
+    }, 500);
   }
 
   public stopSimulator(): void {
