@@ -4,7 +4,6 @@ exports.SerialBridgeService = void 0;
 let SerialPortClass = null;
 let ReadlineParserClass = null;
 try {
-    // Dynamically require serialport so it fails gracefully on cloud servers (e.g. Render Linux containers)
     const spModule = require('serialport');
     const parserModule = require('@serialport/parser-readline');
     SerialPortClass = spModule.SerialPort;
@@ -26,7 +25,7 @@ class SerialBridgeService {
     simTime = 0;
     constructor() {
         const envSim = process.env.SIMULATOR_MODE;
-        if (envSim === 'false' && SerialPortClass) {
+        if (envSim === 'false') {
             this.isSimulating = false;
         }
         else {
@@ -101,20 +100,31 @@ class SerialBridgeService {
         }
     }
     setSimulationMode(enable) {
-        this.isSimulating = enable;
         if (enable) {
             this.closeCurrentPort();
             this.startSimulator();
         }
         else {
             this.stopSimulator();
+            this.isSimulating = false;
         }
     }
     handleExternalPacket(packet) {
+        // CRITICAL FIX: The instant a real physical hardware packet arrives, IMMEDIATELY SHUT OFF the simulator!
+        if (this.isSimulating) {
+            this.stopSimulator();
+            this.isSimulating = false;
+            console.log('⚡ [SerialBridge] Physical ESP32 Hardware Packet Received! Disabling Simulator Mode and locking onto REAL Hardware telemetry.');
+        }
         this.packetsIngested++;
         this.lastPacketReceivedTime = new Date().toISOString();
+        // Ensure packet is marked as real physical hardware
+        const realPacket = {
+            ...packet,
+            isSimulated: false
+        };
         if (this.onTelemetryCallback) {
-            this.onTelemetryCallback(packet);
+            this.onTelemetryCallback(realPacket);
         }
     }
     handleIncomingDataLine(line) {
@@ -163,7 +173,11 @@ class SerialBridgeService {
                 batteryLevel: 98,
                 isSimulated: true
             };
-            this.handleExternalPacket(packet);
+            if (this.onTelemetryCallback && this.isSimulating) {
+                this.packetsIngested++;
+                this.lastPacketReceivedTime = new Date().toISOString();
+                this.onTelemetryCallback(packet);
+            }
         }, 100);
     }
     stopSimulator() {

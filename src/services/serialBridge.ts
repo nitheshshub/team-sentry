@@ -4,7 +4,6 @@ let SerialPortClass: any = null;
 let ReadlineParserClass: any = null;
 
 try {
-  // Dynamically require serialport so it fails gracefully on cloud servers (e.g. Render Linux containers)
   const spModule = require('serialport');
   const parserModule = require('@serialport/parser-readline');
   SerialPortClass = spModule.SerialPort;
@@ -28,7 +27,7 @@ export class SerialBridgeService {
 
   constructor() {
     const envSim = process.env.SIMULATOR_MODE;
-    if (envSim === 'false' && SerialPortClass) {
+    if (envSim === 'false') {
       this.isSimulating = false;
     } else {
       this.isSimulating = true;
@@ -113,20 +112,34 @@ export class SerialBridgeService {
   }
 
   public setSimulationMode(enable: boolean): void {
-    this.isSimulating = enable;
     if (enable) {
       this.closeCurrentPort();
       this.startSimulator();
     } else {
       this.stopSimulator();
+      this.isSimulating = false;
     }
   }
 
   public handleExternalPacket(packet: TelemetryPacket): void {
+    // CRITICAL FIX: The instant a real physical hardware packet arrives, IMMEDIATELY SHUT OFF the simulator!
+    if (this.isSimulating) {
+      this.stopSimulator();
+      this.isSimulating = false;
+      console.log('⚡ [SerialBridge] Physical ESP32 Hardware Packet Received! Disabling Simulator Mode and locking onto REAL Hardware telemetry.');
+    }
+
     this.packetsIngested++;
     this.lastPacketReceivedTime = new Date().toISOString();
+    
+    // Ensure packet is marked as real physical hardware
+    const realPacket: TelemetryPacket = {
+      ...packet,
+      isSimulated: false
+    };
+
     if (this.onTelemetryCallback) {
-      this.onTelemetryCallback(packet);
+      this.onTelemetryCallback(realPacket);
     }
   }
 
@@ -181,7 +194,11 @@ export class SerialBridgeService {
         isSimulated: true
       };
 
-      this.handleExternalPacket(packet);
+      if (this.onTelemetryCallback && this.isSimulating) {
+        this.packetsIngested++;
+        this.lastPacketReceivedTime = new Date().toISOString();
+        this.onTelemetryCallback(packet);
+      }
     }, 100);
   }
 
